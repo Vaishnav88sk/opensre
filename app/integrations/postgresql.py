@@ -370,6 +370,86 @@ def get_current_queries(
         return {"source": "postgresql", "available": False, "error": str(err)}
 
 
+def get_blocking_queries(
+    config: PostgreSQLConfig,
+) -> dict[str, Any]:
+    """Retrieve database queries that are currently blocked by other queries.
+
+    Read-only: queries pg_stat_activity and pg_locks system views.
+    Results are capped at config.max_results.
+    """
+    if not config.is_configured:
+        return {"source": "postgresql", "available": False, "error": "Not configured."}
+
+    try:
+        conn = _get_connection(config)
+        try:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                """
+                SELECT
+                    blocked_locks.pid AS blocked_pid,
+                    blocked_activity.usename AS blocked_user,
+                    blocking_locks.pid AS blocking_pid,
+                    blocking_activity.usename AS blocking_user,
+                    left(blocked_activity.query, 500) AS blocked_query_truncated,
+                    left(blocking_activity.query, 500) AS blocking_query_truncated,
+                    extract(epoch from (now() - blocked_activity.query_start))::int as blocked_duration_seconds
+                FROM pg_catalog.pg_locks blocked_locks
+                JOIN pg_catalog.pg_stat_activity blocked_activity ON blocked_activity.pid = blocked_locks.pid
+                JOIN pg_catalog.pg_locks blocking_locks
+                    ON blocking_locks.locktype = blocked_locks.locktype
+                    AND blocking_locks.database IS NOT DISTINCT FROM blocked_locks.database
+                    AND blocking_locks.relation IS NOT DISTINCT FROM blocked_locks.relation
+                    AND blocking_locks.page IS NOT DISTINCT FROM blocked_locks.page
+                    AND blocking_locks.tuple IS NOT DISTINCT FROM blocked_locks.tuple
+                    AND blocking_locks.virtualxid IS NOT DISTINCT FROM blocked_locks.virtualxid
+                    AND blocking_locks.transactionid IS NOT DISTINCT FROM blocked_locks.transactionid
+                    AND blocking_locks.classid IS NOT DISTINCT FROM blocked_locks.classid
+                    AND blocking_locks.objid IS NOT DISTINCT FROM blocked_locks.objid
+                    AND blocking_locks.objsubid IS NOT DISTINCT FROM blocked_locks.objsubid
+                    AND blocking_locks.pid != blocked_locks.pid
+                JOIN pg_catalog.pg_stat_activity blocking_activity ON blocking_activity.pid = blocking_locks.pid
+                WHERE NOT blocked_locks.granted
+                LIMIT %s
+            """,
+                (config.max_results,),
+            )
+
+            blocks = []
+            for row in cursor.fetchall():
+                blocks.append(
+                    {
+                        "blocked_pid": row[0],
+                        "blocked_user": row[1] or "",
+                        "blocking_pid": row[2],
+                        "blocking_user": row[3] or "",
+                        "blocked_query_truncated": row[4] or "",
+                        "blocking_query_truncated": row[5] or "",
+                        "blocked_duration_seconds": row[6],
+                    }
+                )
+
+            cursor.close()
+            return {
+                "source": "postgresql",
+                "available": True,
+                "total_blocks": len(blocks),
+                "blocks": blocks,
+            }
+        finally:
+            conn.close()
+    except Exception as err:
+        report_validation_failure(
+            err,
+            logger=logger,
+            integration="postgresql",
+            method="get_blocking_queries",
+        )
+        return {"source": "postgresql", "available": False, "error": str(err)}
+
+
 def get_replication_status(config: PostgreSQLConfig) -> dict[str, Any]:
     """Retrieve replication status (streaming replicas, WAL positions).
 
