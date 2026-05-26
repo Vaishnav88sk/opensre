@@ -1,6 +1,6 @@
 """Tests for GitHubSearchIssuesTool."""
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -53,7 +53,7 @@ def test_search_github_issues_success(mock_resolve_config, mock_call_github_mcp_
     assert result["source"] == "github"
     assert result["query"] == "repo:org/repo bug"
     assert result["matches"] == [{"title": "Bug 1", "number": 1}]
-    
+
     mock_call_github_mcp_tool.assert_called_once()
     args, kwargs = mock_call_github_mcp_tool.call_args
     assert args[1] == "search_issues"
