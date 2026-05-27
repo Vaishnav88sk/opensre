@@ -43,3 +43,30 @@ def test_alert_context_surfaces_v2_contract_hints_for_tool_selection() -> None:
     assert "source_id=aws_rds" in context
     assert "evidence=deployment_metadata" in context
     assert "avoid=Use this tool to inspect SQL query text or Postgres locks." in context
+
+
+def test_alert_context_includes_cost_tier(monkeypatch) -> None:
+    from unittest.mock import MagicMock
+
+    from app.tools.registered_tool import RegisteredTool
+
+    mock_tool = MagicMock(spec=RegisteredTool)
+    mock_tool.name = "mock_cheap_tool"
+    mock_tool.source = "mock_src"
+    mock_tool.description = "A mock tool"
+    mock_tool.cost_tier = "cheap"
+    mock_tool.is_available.return_value = True
+
+    monkeypatch.setattr(
+        "app.tools.registry.get_registered_tools",
+        lambda *_args, **_kwargs: [mock_tool],
+    )
+
+    context = format_alert_context(
+        {
+            "alert_source": "mock_src",
+            "resolved_integrations": {"mock_src": {"ready": True}},
+        }
+    )
+
+    assert "cost_tier=cheap" in context

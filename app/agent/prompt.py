@@ -13,9 +13,11 @@ Your task: investigate the alert below and produce a clear, evidence-backed root
 ## How to work
 
 1. **Start with the primary integration tools listed under "Where to start".** Those tools directly match the alert source — call them first, in parallel where possible.
-2. After each round of results, reason about what you found and decide what to investigate next.
-3. Exhaust the primary integration before branching to secondary ones.
-4. When you have enough evidence (or all relevant tools are exhausted), write your final diagnosis.
+2. **Prioritize cheaper tools:** Always query "cheap" or "moderate" cost_tier tools first (like metrics or narrow lookups) before escalating to "expensive" ones (like broad log scans).
+3. **Record your reasoning:** When choosing between multiple candidate tools, explicitly explain in your thought process why you chose the selected path.
+4. After each round of results, reason about what you found and decide what to investigate next.
+5. Exhaust the primary integration before branching to secondary ones.
+6. When you have enough evidence (or all relevant tools are exhausted), write your final diagnosis.
 
 ## Rules
 
@@ -279,6 +281,8 @@ def _format_tools_by_source(tools_by_source: dict[str, list[Any]]) -> str:
                 details.append(f"evidence={tool.evidence_type}")
             if getattr(tool, "side_effect_level", None):
                 details.append(f"side_effect={tool.side_effect_level}")
+            if getattr(tool, "cost_tier", None):
+                details.append(f"cost_tier={tool.cost_tier}")
             examples = getattr(tool, "examples", None) or []
             anti_examples = getattr(tool, "anti_examples", None) or []
             output_schema = getattr(tool, "output_schema", None)
